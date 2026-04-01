@@ -81,9 +81,6 @@ The PCA allowed the identification of the most important dimensions structuring 
 
 It highlighted the main factors influencing productivity and success, enabling a clearer interpretation of relationships between variables.
 
----
-
-
 
 ## 👩‍💻 Author
 Rahma Bouhmida
