@@ -85,8 +85,4 @@ It highlighted the main factors influencing productivity and success, enabling a
 ## ⚠️ Data Availability
 The original dataset is not publicly available due to privacy and data protection considerations. 
 However, the full analysis and results are provided in the report.
-
-## 🎥 Demo
-
-
 ---
