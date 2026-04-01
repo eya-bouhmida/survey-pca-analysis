@@ -1,0 +1,392 @@
+---
+title: "Analyse de l'impact des facteurs psychologiques et sociaux sur la productivité et la réussite"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 9,
+  fig.height = 6
+)
+```
+
+# Introduction
+
+Ce projet a pour objectif d'étudier l'impact des facteurs psychologiques et sociaux sur la productivité et la réussite des individus en Tunisie à partir des réponses recueillies via un questionnaire en ligne. L'analyse combine :
+
+- une exploration descriptive des réponses ;
+- une **Analyse en Composantes Principales (ACP)** sur les variables quantitatives ;
+- une **Analyse des Correspondances Multiples (ACM)** sur les variables qualitatives ;
+- une **classification HCPC** pour mettre en évidence des profils de répondants.
+
+# 1. Questionnaire et base de données
+
+## 1.1 Période d'enquête
+
+Mars - avril 2025.
+
+## 1.2 Mode de collecte
+
+L'enquête a été réalisée sous forme de questionnaire en ligne, diffusé via des plateformes comme **Google Forms** et les réseaux sociaux.
+
+## 1.3 Description de la base
+
+La base de données contient **115 observations** et **34 variables**, comprenant des informations sociodémographiques ainsi que des variables liées au stress, à la motivation, au bien-être, au soutien social et à la productivité.
+
+# 2. Importation des données
+
+```{r packages}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(plotrix)
+library(FactoMineR)
+library(factoextra)
+library(corrplot)
+```
+
+```{r import-data}
+# Adapter ce chemin selon l'emplacement réel du fichier CSV
+# Option recommandée pour GitHub : placer le fichier dans un dossier data/
+fichier <- "data/dataa.csv"
+donnees <- read.csv(fichier, check.names = FALSE)
+
+# Aperçu de la base
+head(donnees)
+dim(donnees)
+str(donnees)
+```
+
+La base a été construite à partir d'un questionnaire destiné à des individus de différentes catégories socio-professionnelles et classes d'âge. Les données incluent des évaluations d'aspects psychologiques (stress, motivation, fatigue, bien-être) et sociaux (soutien, travail en équipe, isolement), ainsi que leur influence perçue sur la productivité et la réussite.
+
+# 3. Statistiques descriptives
+
+## 3.1 Répartition selon le stress au travail
+
+```{r desc-stress}
+df_stress <- donnees %>%
+  mutate(Stress_Category = ifelse(`Stress_Travail` == 5, "OUI", "NON")) %>%
+  group_by(Stress_Category) %>%
+  summarise(count = n(), .groups = "drop")
+
+pie(
+  df_stress$count,
+  labels = paste0(df_stress$Stress_Category, " (", round(100 * df_stress$count / sum(df_stress$count), 1), "%)"),
+  col = c("#d8e2dc", "#fae1dd"),
+  main = "Répartition selon le stress au travail"
+)
+```
+
+## 3.2 Répartition selon le sexe
+
+```{r desc-sexe}
+df_sexe <- donnees %>%
+  group_by(`Sexe..`) %>%
+  summarise(count = n(), .groups = "drop")
+
+pie(
+  df_sexe$count,
+  labels = paste0(df_sexe$`Sexe..`, " (", round(100 * df_sexe$count / sum(df_sexe$count), 1), "%)"),
+  col = c("#d8e2dc", "#fae1dd", "#cddafd", "#f8edeb"),
+  main = "Répartition selon le sexe"
+)
+```
+
+## 3.3 Répartition selon l'âge
+
+```{r desc-age}
+age_table <- table(donnees$classe.d.âge)
+age_percent <- round(100 * age_table / sum(age_table), 1)
+age_labels <- paste(names(age_table), "\n", age_percent, "%", sep = "")
+
+pastel_colors <- c("#AED6F1", "#A3E4D7", "#F9E79F", "#F5B7B1", "#D2B4DE", "#FADBD8", "#A9DFBF")
+
+pie(
+  age_table,
+  labels = age_labels,
+  col = pastel_colors[1:length(age_table)],
+  main = "Répartition par tranche d'âge"
+)
+```
+
+## 3.4 Répartition selon la catégorie socio-professionnelle
+
+```{r desc-csp}
+csp_table <- table(donnees$`Catégorie.socio.professionnelle..CSP...`)
+csp_percent <- round(100 * csp_table / sum(csp_table), 1)
+csp_labels <- paste(names(csp_table), "\n", csp_percent, "%", sep = "")
+
+pastel_colors <- c("#AED6F1", "#A3E4D7", "#F9E79F", "#F5B7B1", "#D2B4DE", "#FADBD8", "#A9DFBF")
+
+pie3D(
+  csp_table,
+  labels = csp_labels,
+  explode = 0.15,
+  radius = 1.4,
+  labelcex = 0.9,
+  col = pastel_colors[1:length(csp_table)],
+  main = "Répartition par catégorie socio-professionnelle"
+)
+```
+
+## 3.5 Impact de certains facteurs psychologiques sur le travail
+
+```{r desc-psychological-factors}
+cols_to_plot <- c(
+  "Procrastination_Motivation",
+  "Motivation_Travail",
+  "Pression_Performance"
+)
+
+# Vérifie que les colonnes existent bien dans la base
+cols_to_plot <- cols_to_plot[cols_to_plot %in% names(donnees)]
+
+data_long <- donnees %>%
+  select(all_of(cols_to_plot)) %>%
+  pivot_longer(cols = everything(), names_to = "Question", values_to = "Reponse") %>%
+  filter(!is.na(Reponse)) %>%
+  mutate(
+    Reponse = factor(
+      Reponse,
+      levels = c(1, 2, 3, 4, 5),
+      labels = c(
+        "Pas du tout d'accord",
+        "Plutôt pas d'accord",
+        "Neutre / Indécis(e)",
+        "Plutôt d'accord",
+        "Tout à fait d'accord"
+      )
+    )
+  )
+
+ggplot(data_long, aes(x = Question, fill = Reponse)) +
+  geom_bar(position = position_dodge(width = 0.8), width = 0.7) +
+  labs(
+    title = "Lien entre certains facteurs psychologiques et la performance",
+    x = NULL,
+    y = "Nombre de réponses",
+    fill = "Réponse"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1),
+    plot.title = element_text(face = "bold", hjust = 0.5)
+  )
+```
+
+# 4. Analyse en Composantes Principales (ACP)
+
+## 4.1 Objectif de l'ACP
+
+L'ACP permet de résumer un ensemble de variables quantitatives corrélées en un nombre réduit d'axes factoriels. Elle facilite l'interprétation des grandes dimensions structurant les réponses.
+
+## 4.2 Sélection des variables quantitatives
+
+D'après le projet initial, les variables quantitatives étudiées se situent entre les colonnes 5 et 16. On conserve cette logique, tout en corrigeant la syntaxe et en documentant clairement le traitement des valeurs manquantes.
+
+```{r pca-data}
+donnees_num <- donnees[, 5:16]
+
+# Conserver uniquement les lignes complètes sur ce sous-ensemble
+# Cela garantit une ACP réalisée sur des données sans NA.
+donnees_num <- na.omit(donnees_num)
+
+summary(donnees_num)
+```
+
+## 4.3 Réalisation de l'ACP
+
+```{r run-pca}
+res.pca <- PCA(donnees_num, scale.unit = TRUE, graph = FALSE)
+```
+
+## 4.4 Choix du nombre d'axes à conserver
+
+On utilise les critères de Kaiser, de l'inertie cumulée et du coude.
+
+```{r pca-eigenvalues}
+eig.val <- get_eigenvalue(res.pca)
+eig.val
+```
+
+### 4.4.1 Critère de Kaiser
+
+Selon le **critère de Kaiser**, on conserve les axes dont la valeur propre est supérieure à 1.
+
+Dans la version corrigée du projet, les résultats affichés dans le rapport HTML montrent que **deux axes** présentent une valeur propre supérieure à 1. Il convient donc de retenir **2 axes** et non 3. fileciteturn4file1 fileciteturn4file0
+
+### 4.4.2 Critère d'inertie cumulée
+
+Les deux premiers axes expliquent une part importante de l'inertie totale, ce qui justifie également leur conservation.
+
+### 4.4.3 Critère du coude
+
+```{r pca-screeplot}
+fviz_eig(res.pca, addlabels = TRUE, title = "Scree Plot - ACP")
+```
+
+Le graphique présente un coude au niveau du **deuxième axe**.
+
+### Décision finale
+
+Au vu des trois critères, **les deux premiers axes sont retenus** pour l'interprétation.
+
+## 4.5 Interprétation des axes
+
+```{r pca-cos2}
+var <- get_pca_var(res.pca)
+corrplot(var$cos2, is.corr = FALSE)
+var$coord
+```
+
+Plus le **cos2** est élevé, meilleure est la représentation de la variable sur les axes considérés.
+
+### Axe 1 : Stress, fatigue et bien-être psychologique
+
+- Les variables comme **Stress_Travail**, **Épuisement_Mental_travail**, **Concentration_Stress**, **Fatigue_Efficacité**, **Stress_Productivité** et **Pression_Performance** sont fortement associées au premier axe.
+- À l'opposé, les variables comme **Motivation_Travail**, **Confiance_Réussite**, **Fixation_Objectifs**, **BienÊtre_Productivité** et **Confort_Travail** contribuent à l'autre pôle.
+
+**Interprétation :** cet axe oppose un profil marqué par le stress, la pression et la fatigue à un profil caractérisé par la motivation, le bien-être et la confiance en la réussite.
+
+### Axe 2 : Soutien social et dynamique relationnelle
+
+- Les variables telles que **Soutien_Entourage**, **Travail_Équipe**, **Soutien_Démotivation** et **Interaction_Productivité** sont liées au pôle positif de l'axe 2.
+- À l'inverse, **Isolement_Travail**, **Découragement_Reconnaissance** et **Pression_Excessive** se situent du côté opposé.
+
+**Interprétation :** cet axe traduit un contraste entre un environnement de soutien et de collaboration, et un contexte de solitude ou de pression excessive.
+
+## 4.6 Carte des variables
+
+```{r pca-var-map}
+fviz_pca_var(
+  res.pca,
+  axes = c(1, 2),
+  col.var = "cos2",
+  gradient.cols = c("white", "blue", "red"),
+  repel = TRUE,
+  title = "Carte des variables - Axes 1 et 2"
+)
+```
+
+### Lecture de la carte des variables
+
+- **Axe 1** oppose les dimensions de stress et d'épuisement aux dimensions de motivation et de bien-être.
+- **Axe 2** oppose le soutien social et le travail collaboratif à l'isolement et à la pression.
+- Les variables proches du centre sont moins bien représentées par les deux premiers axes.
+
+## 4.7 Carte des individus
+
+```{r pca-ind-map}
+fviz_pca_ind(
+  res.pca,
+  geom.ind = "point",
+  col.ind = "cos2",
+  gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+  repel = TRUE,
+  title = "Carte des individus - ACP"
+)
+```
+
+# 5. Remarque méthodologique importante
+
+Dans le projet initial, le nettoyage par `na.omit()` était appliqué séparément à différents sous-ensembles pour les analyses. Il faut garder à l'esprit que cela peut conduire à des **effectifs différents selon l'analyse** si les valeurs manquantes ne concernent pas les mêmes lignes. Cette précision doit être mentionnée dans l'interprétation méthodologique. fileciteturn4file0
+
+# 6. Analyse des Correspondances Multiples (ACM)
+
+## 6.1 Objectif
+
+L'ACM permet de résumer et visualiser les relations entre les variables qualitatives : âge, sexe, catégorie socio-professionnelle, niveaux de stress, motivation, fatigue, bien-être, etc.
+
+## 6.2 Préparation des variables actives
+
+```{r mca-data}
+# Sélection des variables qualitatives actives
+active_vars <- donnees[, 2:25]
+active_vars <- as.data.frame(lapply(active_vars, as.factor))
+
+res.mca <- MCA(active_vars, graph = FALSE)
+print(res.mca$eig)
+```
+
+## 6.3 Choix du nombre d'axes
+
+```{r mca-screeplot}
+fviz_screeplot(res.mca)
+```
+
+## 6.4 Carte des modalités
+
+```{r mca-var-map}
+fviz_mca_var(
+  res.mca,
+  repel = TRUE,
+  ggtheme = theme_minimal()
+)
+```
+
+### Interprétation générale
+
+La carte des modalités permet d'identifier des groupes de réponses proches, traduisant des profils de répondants ayant des caractéristiques similaires en matière de stress, motivation, soutien social et conditions de travail.
+
+## 6.5 Biplot ACM
+
+```{r mca-biplot}
+fviz_mca_biplot(
+  res.mca,
+  col.ind = "cos2",
+  invisible = "var",
+  repel = TRUE,
+  ggtheme = theme_minimal()
+)
+```
+
+# 7. Classification HCPC
+
+## 7.1 Objectif
+
+L'objectif de la classification est de regrouper les individus présentant des profils similaires de réponses afin d'identifier des catégories homogènes.
+
+## 7.2 Réalisation de la classification
+
+```{r hcpc-analysis}
+res.hcpc <- HCPC(res.mca, nb.clust = 4, graph = FALSE)
+```
+
+```{r hcpc-plot}
+fviz_cluster(
+  res.hcpc,
+  repel = TRUE,
+  show.clust.cent = TRUE,
+  palette = "jco",
+  ggtheme = theme_minimal(),
+  main = "HCPC - Factor map"
+)
+```
+
+## 7.3 Interprétation des classes
+
+Les classes obtenues représentent des profils types de répondants. Une interprétation prudente permet notamment de distinguer :
+
+- des profils plus stressés et fatigués ;
+- des profils plus motivés et soutenus socialement ;
+- des profils équilibrés entre stress et productivité ;
+- des profils marqués par l'épuisement et une plus faible confiance.
+
+L'interprétation détaillée doit toujours rester cohérente avec la qualité de représentation des individus et des modalités sur les axes factoriels.
+
+# Conclusion
+
+Cette étude met en évidence l'intérêt des méthodes factorielles pour analyser un questionnaire multidimensionnel. L'ACP a permis d'identifier deux grandes dimensions structurant les variables quantitatives :
+
+1. un axe opposant stress / fatigue à motivation / bien-être ;
+2. un axe opposant soutien social / collaboration à isolement / pression.
+
+L'ACM et la classification ont ensuite permis de dégager différents profils de répondants. Ces résultats peuvent servir de base à une réflexion sur les conditions psychologiques et sociales qui favorisent la productivité et la réussite.
