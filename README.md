@@ -84,9 +84,6 @@ It highlighted the main factors influencing productivity and success, enabling a
 ---
 
 ## 🎥 Demo
-You can explore the full analysis in the notebook and the HTML report:
 
-- 📄 `reports/final_report.html`
-- 📓 `notebooks/pca_analysis.ipynb`
 
 ---
