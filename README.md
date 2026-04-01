@@ -82,6 +82,9 @@ The PCA allowed the identification of the most important dimensions structuring 
 It highlighted the main factors influencing productivity and success, enabling a clearer interpretation of relationships between variables.
 
 ---
+## ⚠️ Data Availability
+The original dataset is not publicly available due to privacy and data protection considerations. 
+However, the full analysis and results are provided in the report.
 
 ## 🎥 Demo
 
